@@ -20,7 +20,6 @@ import (
 )
 
 // Result represents the processed results for a single driver in a single session.
-// Result represents the processed results for a single driver in a single session.
 type Result struct {
 	SubsessionID     int64            `bson:"subsession_id"`       // iRacing subsession identifier
 	DriverID         int64            `bson:"driver_id"`           // iRacing customer/driver ID
@@ -28,7 +27,6 @@ type Result struct {
 	Laps             []processing.Lap `bson:"laps"`                // All laps driven by this driver
 }
 
-// Competition defines a racing competition with its associated event groups.
 // Competition defines a racing competition with its associated event groups.
 type Competition struct {
 	CompetitionID int64 `bson:"competition_id"` // Unique identifier for this competition
@@ -39,7 +37,6 @@ type Competition struct {
 	EventGroups []EventGroup `bson:"event_groups"` // Groups of events that are part of this competition
 }
 
-// EventGroup defines a set of racing events on a specific track within a time window.
 // EventGroup defines a set of racing events on a specific track within a time window.
 type EventGroup struct {
 	TrackID  int64     // iRacing track ID

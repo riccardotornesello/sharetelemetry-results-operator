@@ -75,7 +75,7 @@ Deploy as a Cloud Run function that processes competitions triggered by Pub/Sub 
 
 ```bash
 gcloud functions deploy process-competition \
-  --runtime go125 \
+  --runtime go122 \
   --trigger-topic competition-events \
   --entry-point ProcessCompetition \
   --set-env-vars MONGODB_URI=<your-uri>
