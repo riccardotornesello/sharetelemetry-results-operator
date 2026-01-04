@@ -32,7 +32,7 @@ type Competition struct {
 	CompetitionID int64 `bson:"competition_id"` // Unique identifier for this competition
 
 	LeagueID int64 `bson:"league_id"` // iRacing league ID
-	SeasonID int64 `bson:"season_id"` // iRacing season ID (0 for current season)
+	SeasonID int64 `bson:"season_id"` // iRacing season ID (0 for no season)
 
 	EventGroups []EventGroup `bson:"event_groups"` // Groups of events that are part of this competition
 }
@@ -169,7 +169,7 @@ func processCompetition(competition Competition) {
 	rawLapsDocs, err := scraperDb.DB.Collection(scraperprocessing.SessionCollection).Find(scraperDb.Ctx, map[string]interface{}{
 		"meta.kind":                     scraperprocessing.LapsKind,
 		"meta.labels.subsession_id":     map[string]interface{}{"$in": sessionsToProcess},
-		"meta.labels.simsession_number": 0, // 0 = race session
+		"meta.labels.simsession_number": 0, // 0 = last session (qualify or race)
 	})
 	if err != nil {
 		panic(err)
