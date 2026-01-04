@@ -18,25 +18,25 @@ import (
 
 // Result represents the processed results for a single driver in a single session.
 type Result struct {
-	SubsessionID     int64            `bson:"subsession_id"`       // iRacing subsession identifier
-	DriverID         int64            `bson:"driver_id"`           // iRacing customer/driver ID
-	AverageLapTimeMs int64            `bson:"average_lap_time_ms"` // Average lap time in milliseconds
-	Laps             []processing.Lap `bson:"laps"`                // All laps driven by this driver
+	SubsessionID     int64            `json:"subsession_id" bson:"subsession_id"`             // iRacing subsession identifier
+	DriverID         int64            `json:"driver_id" bson:"driver_id"`                     // iRacing customer/driver ID
+	AverageLapTimeMs int64            `json:"average_lap_time_ms" bson:"average_lap_time_ms"` // Average lap time in milliseconds
+	Laps             []processing.Lap `json:"laps" bson:"laps"`                               // All laps driven by this driver
 }
 
 // Competition defines a racing competition with its associated event groups.
 type Competition struct {
-	CompetitionID int64        `bson:"competition_id"` // Unique identifier for this competition
-	LeagueID      int64        `bson:"league_id"`      // iRacing league ID
-	SeasonID      int64        `bson:"season_id"`      // iRacing season ID (0 for current season)
-	EventGroups   []EventGroup `bson:"event_groups"`   // Groups of events that are part of this competition
+	CompetitionID int64        `json:"competition_id" bson:"competition_id"` // Unique identifier for this competition
+	LeagueID      int64        `json:"league_id" bson:"league_id"`           // iRacing league ID
+	SeasonID      int64        `json:"season_id" bson:"season_id"`           // iRacing season ID (0 for current season)
+	EventGroups   []EventGroup `json:"event_groups" bson:"event_groups"`     // Groups of events that are part of this competition
 }
 
 // EventGroup defines a set of racing events on a specific track within a time window.
 type EventGroup struct {
-	TrackID  int64     `bson:"track_id"`  // iRacing track ID
-	FromTime time.Time `bson:"from_time"` // Start of the event window (inclusive)
-	ToTime   time.Time `bson:"to_time"`   // End of the event window (inclusive)
+	TrackID  int64     `json:"track_id" bson:"track_id"`   // iRacing track ID
+	FromTime time.Time `json:"from_time" bson:"from_time"` // Start of the event window (inclusive)
+	ToTime   time.Time `json:"to_time" bson:"to_time"`     // End of the event window (inclusive)
 }
 
 // Process handles the main logic for processing a competition's results.
@@ -85,7 +85,7 @@ func Process(ctx context.Context, competition Competition) error {
 	rawLapsDocs, err := scraperDb.DB.Collection(scraperprocessing.SessionCollection).Find(scraperDb.Ctx, map[string]interface{}{
 		"meta.kind":                     scraperprocessing.LapsKind,
 		"meta.labels.subsession_id":     map[string]interface{}{"$in": sessionsToProcess},
-		"meta.labels.simsession_number": 0, // 0 = race session
+		"meta.labels.simsession_number": 0, // 0 = last session (qualifying or race)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to find laps: %w", err)

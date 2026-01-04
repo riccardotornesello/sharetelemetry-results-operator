@@ -137,9 +137,8 @@ go test ./...
 │   └── operator/          # CLI application entry point
 │       └── main.go
 ├── pkg/
-│   └── processing/        # Core processing logic
-│       ├── laps.go        # Lap parsing and validation
-│       └── stint.go       # Average time calculations
+│   ├── competition/       # Competition data structures and logic
+│   └── processing/        # Core processing logic for laps and stints
 ├── function.go            # Cloud Run function handler
 ├── Dockerfile             # Container image definition
 └── go.mod                 # Go module dependencies

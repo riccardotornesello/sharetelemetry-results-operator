@@ -9,12 +9,12 @@ import (
 // Lap represents a single lap in a racing session with all relevant timing and event data.
 // It contains information about lap performance, flags, incidents, and session timing.
 type Lap struct {
-	LapNumber   int64    `bson:"lap_number"`   // Lap number in the session (-1 for out lap)
-	Flags       int64    `bson:"flags"`        // Flag conditions during the lap (bitfield)
-	Incident    bool     `bson:"incident"`     // Whether an incident occurred during this lap
-	SessionTime int64    `bson:"session_time"` // Session time in milliseconds when lap was completed
-	LapTime     int64    `bson:"lap_time"`     // Lap time in 1/10000th of a second
-	LapEvents   []string `bson:"lap_events"`   // Events that occurred during the lap (e.g., "pitted")
+	LapNumber   int64    `json:"lap_number" bson:"lap_number"`     // Lap number in the session (-1 for out lap)
+	Flags       int64    `json:"flags" bson:"flags"`               // Flag conditions during the lap (bitfield)
+	Incident    bool     `json:"incident" bson:"incident"`         // Whether an incident occurred during this lap
+	SessionTime int64    `json:"session_time" bson:"session_time"` // Session time in milliseconds when lap was completed
+	LapTime     int64    `json:"lap_time" bson:"lap_time"`         // Lap time in 1/10000th of a second
+	LapEvents   []string `json:"lap_events" bson:"lap_events"`     // Events that occurred during the lap (e.g., "pitted")
 }
 
 // ParseLaps converts iRacing API lap data chunks into our internal Lap representation.
