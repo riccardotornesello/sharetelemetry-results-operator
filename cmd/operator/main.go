@@ -1,192 +1,95 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"context"
+	"flag"
 	"log"
-	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
-	"riccardotornesello.it/sharetelemetry/results/operator/pkg/processing"
-
-	"github.com/riccardotornesello/irapi-go/pkg/api/results/lap_data"
-	"github.com/riccardotornesello/sharetelemetry-iracing-scraper/pkg/database"
-	scraperprocessing "github.com/riccardotornesello/sharetelemetry-iracing-scraper/pkg/processing"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"riccardotornesello.it/sharetelemetry/results/operator/pkg/competition"
 )
 
-type Result struct {
-	SubsessionID     int64            `bson:"subsession_id"`
-	DriverID         int64            `bson:"driver_id"`
-	AverageLapTimeMs int64            `bson:"average_lap_time_ms"`
-	Laps             []processing.Lap `bson:"laps"`
+// eventGroupFlag is a custom flag type for parsing event group command line arguments.
+type eventGroupFlag []string
+
+func (e *eventGroupFlag) String() string {
+	return strings.Join(*e, ",")
 }
 
-type Competition struct {
-	CompetitionID int64 `bson:"competition_id"`
-
-	LeagueID int64 `bson:"league_id"`
-	SeasonID int64 `bson:"season_id"`
-
-	EventGroups []EventGroup `bson:"event_groups"`
-}
-
-type EventGroup struct {
-	TrackID  int64
-	FromTime time.Time
-	ToTime   time.Time
+func (e *eventGroupFlag) Set(value string) error {
+	*e = append(*e, value)
+	return nil
 }
 
 func main() {
-	// TODO: get details from call arguments
-	competition := Competition{
-		CompetitionID: 12345,
-		LeagueID:      7843,
-		SeasonID:      0,
-		EventGroups: []EventGroup{
-			{
-				TrackID:  498,
-				FromTime: time.Date(2025, 5, 9, 11, 0, 0, 0, time.UTC),
-				ToTime:   time.Date(2025, 5, 9, 23, 0, 0, 0, time.UTC),
-			},
-			{
-				TrackID:  498,
-				FromTime: time.Date(2025, 5, 10, 11, 0, 0, 0, time.UTC),
-				ToTime:   time.Date(2025, 5, 10, 23, 0, 0, 0, time.UTC),
-			},
-			{
-				TrackID:  498,
-				FromTime: time.Date(2025, 5, 11, 11, 0, 0, 0, time.UTC),
-				ToTime:   time.Date(2025, 5, 11, 23, 0, 0, 0, time.UTC),
-			},
-		},
-	}
-
-	dbUri := os.Getenv("MONGODB_URI")
-	scraperDbName := os.Getenv("MONGODB_SCRAPER_DATABASE")
-	operatorDbName := os.Getenv("MONGODB_OPERATOR_DATABASE")
-
-	scraperDb := database.Connect(dbUri, scraperDbName)
-	defer scraperDb.Disconnect()
-	operatorDb := database.Connect(dbUri, operatorDbName)
-	defer operatorDb.Disconnect()
-
-	// Get the season
-	season := scraperprocessing.SeasonDoc{}
-	err := scraperDb.DB.Collection("seasons").FindOne(scraperDb.Ctx, map[string]interface{}{
-		"meta.kind": "iracing_league_season",
-		"meta.name": fmt.Sprintf("league_%d_season_%d", competition.LeagueID, competition.SeasonID),
-	}).Decode(&season)
-	if err != nil {
-		panic(err)
-	}
-
-	// Get which parsed sessions to process
-	sessionsToProcess := []int64{}
-	for subsessionIdStr, sessionStatus := range season.Status.ParsedSessions {
-		subsessionId, err := strconv.ParseInt(subsessionIdStr, 10, 64)
-		if err != nil {
-			panic(err)
-		}
-
-		if sessionInEventGroups(&sessionStatus, competition.EventGroups) {
-			sessionsToProcess = append(sessionsToProcess, subsessionId)
-		}
-	}
-
-	log.Printf("Sessions to process: %d\n", len(sessionsToProcess))
-
-	// Get all the laps documents for the sessions to process
-	rawLapsDocs, err := scraperDb.DB.Collection(scraperprocessing.SessionCollection).Find(scraperDb.Ctx, map[string]interface{}{
-		"meta.kind":                     scraperprocessing.LapsKind,
-		"meta.labels.subsession_id":     map[string]interface{}{"$in": sessionsToProcess},
-		"meta.labels.simsession_number": 0,
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer rawLapsDocs.Close(scraperDb.Ctx)
-
-	var lapsDocs []scraperprocessing.LapsDoc
-	if err := rawLapsDocs.All(scraperDb.Ctx, &lapsDocs); err != nil {
-		panic(err)
-	}
-
-	log.Printf("Found %d laps documents\n", len(lapsDocs))
-
-	// Group per session and driver
-	results := make([]Result, len(lapsDocs))
-	for i, lapsDoc := range lapsDocs {
-		// Each document is for a single driver in a single session
-		subsessionId := lapsDoc.Meta.Labels["subsession_id"].(int64)
-		driverId := lapsDoc.Meta.Labels["cust_id"].(int64)
-
-		// Parse the laps from the document to the iRacing structs
-		rawLaps := []lap_data.ResultsLapDataResponseChunk{}
-		dataBytes, err := json.Marshal(lapsDoc.Spec.Chunks)
-		if err != nil {
-			panic(err)
-		}
-		if err := json.Unmarshal(dataBytes, &rawLaps); err != nil {
-			panic(err)
-		}
-
-		// Convert to our Lap struct
-		parsedLaps, err := processing.ParseLaps(rawLaps)
-		if err != nil {
-			panic(err)
-		}
-
-		// Calculate average lap time for the driver in this session
-		averageLapTimeMs := processing.GetAverageTimeMs(parsedLaps, 3)
-
-		results[i] = Result{
-			SubsessionID:     subsessionId,
-			DriverID:         driverId,
-			AverageLapTimeMs: averageLapTimeMs,
-			Laps:             parsedLaps,
-		}
-	}
-
-	// Store the event document
-	_, err = operatorDb.DB.Collection("competitions").UpdateOne(
-		operatorDb.Ctx,
-		map[string]interface{}{
-			"competition_id": competition.CompetitionID,
-		},
-		map[string]interface{}{
-			"$set": map[string]interface{}{
-				"results": results,
-			},
-		},
-		options.UpdateOne().SetUpsert(true),
+	// Parse command line flags
+	var (
+		competitionID int64
+		leagueID      int64
+		seasonID      int64
+		eventGroups   eventGroupFlag
 	)
 
-	log.Printf("Stored event document with %d results\n", len(results))
-}
+	flag.Int64Var(&competitionID, "competition-id", 0, "Unique identifier for the competition")
+	flag.Int64Var(&leagueID, "league-id", 0, "iRacing league ID")
+	flag.Int64Var(&seasonID, "season-id", 0, "iRacing season ID (use 0 for current season)")
+	flag.Var(&eventGroups, "event-group", "Event group in format 'trackID,fromTime,toTime' (can be specified multiple times)")
+	flag.Parse()
 
-func sessionInEventGroups(session *scraperprocessing.SeasonStatusSession, eventGroups []EventGroup) bool {
-	if session.TrackID == nil || session.LaunchAt == nil {
-		return false
+	// Validate required flags
+	if competitionID == 0 {
+		log.Fatal("--competition-id is required")
+	}
+	if leagueID == 0 {
+		log.Fatal("--league-id is required")
+	}
+	if len(eventGroups) == 0 {
+		log.Fatal("at least one --event-group is required")
 	}
 
-	for _, eventGroup := range eventGroups {
-		if *session.TrackID != eventGroup.TrackID {
-			continue
+	// Parse event groups from command line arguments
+	parsedEventGroups := make([]competition.EventGroup, 0, len(eventGroups))
+	for _, eg := range eventGroups {
+		parts := strings.Split(eg, ",")
+		if len(parts) != 3 {
+			log.Fatalf("Invalid event group format '%s'. Expected: trackID,fromTime,toTime", eg)
 		}
 
-		if session.LaunchAt.Before(eventGroup.FromTime) {
-			continue
+		trackID, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			log.Fatalf("Invalid track ID '%s': %v", parts[0], err)
 		}
 
-		if session.LaunchAt.After(eventGroup.ToTime) {
-			continue
+		fromTime, err := time.Parse(time.RFC3339, parts[1])
+		if err != nil {
+			log.Fatalf("Invalid from time '%s': %v", parts[1], err)
 		}
 
-		return true
+		toTime, err := time.Parse(time.RFC3339, parts[2])
+		if err != nil {
+			log.Fatalf("Invalid to time '%s': %v", parts[2], err)
+		}
+
+		parsedEventGroups = append(parsedEventGroups, competition.EventGroup{
+			TrackID:  trackID,
+			FromTime: fromTime,
+			ToTime:   toTime,
+		})
 	}
 
-	return false
+	// Build competition from command line arguments
+	comp := competition.Competition{
+		CompetitionID: competitionID,
+		LeagueID:      leagueID,
+		SeasonID:      seasonID,
+		EventGroups:   parsedEventGroups,
+	}
+
+	// Process the competition
+	if err := competition.Process(context.Background(), comp); err != nil {
+		log.Fatalf("Failed to process competition: %v", err)
+	}
 }
