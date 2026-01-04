@@ -34,9 +34,9 @@ type Competition struct {
 
 // EventGroup defines a set of racing events on a specific track within a time window.
 type EventGroup struct {
-	TrackID  int64     // iRacing track ID
-	FromTime time.Time // Start of the event window (inclusive)
-	ToTime   time.Time // End of the event window (inclusive)
+	TrackID  int64     `bson:"track_id"`  // iRacing track ID
+	FromTime time.Time `bson:"from_time"` // Start of the event window (inclusive)
+	ToTime   time.Time `bson:"to_time"`   // End of the event window (inclusive)
 }
 
 // Process handles the main logic for processing a competition's results.
