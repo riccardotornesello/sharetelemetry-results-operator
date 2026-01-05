@@ -1,3 +1,11 @@
+terraform {
+  backend "gcs" {
+    bucket = "terraform-state-results-operator"
+    prefix = "terraform/state"
+  }
+}
+
+
 provider "google" {
   project         = var.project_id
   region          = var.region
@@ -64,7 +72,7 @@ data "archive_file" "source_code" {
 
 resource "google_storage_bucket" "source" {
   name                        = "gcf-source-${random_id.bucket_prefix.hex}" # Every bucket name must be globally unique
-  location                    = var.region
+  location                    = "us-east1"                                  # Free tier requirement
   uniform_bucket_level_access = true
   force_destroy               = true
 }
